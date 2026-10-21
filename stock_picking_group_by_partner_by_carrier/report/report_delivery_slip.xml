@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <template
+        id="report_delivery_document"
+        inherit_id="sale_stock.report_delivery_document_inherit_sale_stock"
+    >
+        <div class="page" position="before">
+            <t t-set="report_lines" t-value="o.get_delivery_report_lines()" />
+        </div>
+
+        <!-- make origin one line as it can be long -->
+        <xpath
+            expr="//div[@id='informations']/div[@name='div_origin']"
+            position="attributes"
+        >
+            <attribute name="class">col mw-100 mb-2</attribute>
+        </xpath>
+
+        <!-- overrides when the picking is not done -->
+        <xpath
+            expr='//table[@name="stock_move_table"]/tbody/t[@t-set="lines"]'
+            position="attributes"
+        >
+            <attribute name="t-value">report_lines</attribute>
+        </xpath>
+
+        <xpath
+            expr='//table[@name="stock_move_table"]/tbody/tr//span[@t-field="move.product_id"]/..'
+            position="attributes"
+        >
+            <attribute name="t-if">False</attribute>
+        </xpath>
+
+        <xpath
+            expr='//table[@name="stock_move_table"]/tbody/tr//span[@t-field="move.product_id"]/..'
+            position="after"
+        >
+            <t t-if="move.id">
+                <td>
+                    <span t-field="move.product_id" />
+                    <p t-if="move.description_picking != move.product_id.name">
+                        <span t-field="move.description_picking" />
+                    </p>
+                </td>
+            </t>
+            <t t-else="">
+                <th>
+                    <span t-esc="move.description_picking" />
+                </th>
+            </t>
+        </xpath>
+
+        <!-- the separator rows (sale order name) have no quantities -->
+        <xpath
+            expr='(//table[@name="stock_move_table"]/tbody/tr/td[hasclass("o_td_quantity")])[1]'
+            position="attributes"
+        >
+            <attribute name="t-if">move.id</attribute>
+        </xpath>
+        <xpath
+            expr='(//table[@name="stock_move_table"]/tbody/tr/td[hasclass("o_td_quantity")])[2]'
+            position="attributes"
+        >
+            <attribute name="t-if">move.id</attribute>
+        </xpath>
+
+        <!-- overrides when the picking is done -->
+        <!-- With lots or serial numbers the lines are printed as they are,
+        with a separator row for each sale order -->
+        <xpath
+            expr="//table[@name='stock_move_line_table']/tbody/t[@t-else='']/t[@t-if='has_serial_number']/tr[@t-as='move_line']"
+            position="attributes"
+        >
+            <attribute name="t-foreach">o.get_delivery_report_lines()</attribute>
+        </xpath>
+        <!-- Without them the quantities are aggregated for each sale order -->
+        <xpath
+            expr="//table[@name='stock_move_line_table']/tbody/t[@t-else='']/t[@name='aggregated_move_lines']"
+            position="replace"
+        >
+            <t t-else="" name="aggregated_move_lines">
+                <t
+                    t-foreach="o.get_delivery_report_aggregated_groups()"
+                    t-as="group_lines"
+                >
+                    <tr t-if="group_lines['title']">
+                        <th colspan="3">
+                            <span t-out="group_lines['title']" />
+                        </th>
+                    </tr>
+                    <t
+                        t-set="aggregated_lines"
+                        t-value="group_lines['move_lines']._get_aggregated_product_quantities()"
+                    />
+                    <t t-call="stock.stock_report_delivery_aggregated_move_lines" />
+                </t>
+            </t>
+        </xpath>
+
+        <xpath
+            expr="//table[@name='stock_backorder_table']/../p[last()]"
+            position="attributes"
+        >
+            <attribute name="t-if">False</attribute>
+        </xpath>
+
+        <xpath expr="//p[hasclass('mt-5')]/.." position="attributes">
+            <attribute name="t-if">False</attribute>
+            <attribute name="name">stock_backorder_block</attribute>
+        </xpath>
+        <xpath expr='//div[@name="stock_backorder_block"]' position="after">
+            <t t-if="o.picking_type_id.code == 'outgoing' and get_remaining_to_deliver">
+                <t t-set="remainings" t-value="get_remaining_to_deliver(o)" />
+                <t
+                    t-if="not remainings and all(q.product_uom_qty == q.quantity for q in o.move_ids)"
+                >
+                    <p
+                        class="remaining-to-deliver-separator"
+                    >All ordered items have been delivered.</p>
+                </t>
+                <t t-elif="remainings">
+                    <p class="remaining-to-deliver-separator">Remaining to deliver:</p>
+                    <table
+                        class="table table-borderless table-sm"
+                        name="remaining_to_deliver_table"
+                    >
+                        <tbody>
+                            <tr t-foreach="remainings" t-as="remaining">
+                                <td>
+                                    <span
+                                        t-att-class="'fw-bold' if remaining['is_header'] else None"
+                                        t-esc="remaining['concept']"
+                                    />
+                                </td>
+                                <td class="text-center text-nowrap">
+                                    <t t-if="not remaining['is_header']">
+                                        <span
+                                            t-esc="remaining['qty']"
+                                            t-options="{'widget': 'float', 'decimal_precision': 'Product Unit of Measure'}"
+                                        />
+                                        <span
+                                            class="remaining_uom_name"
+                                            t-field="remaining['uom'].name"
+                                        />
+                                    </t>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </t>
+            </t>
+        </xpath>
+    </template>
+
+    <template
+        id="stock_report_delivery_has_serial_move_line_inherit"
+        inherit_id="stock.stock_report_delivery_has_serial_move_line"
+    >
+        <!-- Odoo tries to display both description and product name.
+        When the line is a SO section, we only want to display a description.
+        Enable default behavior when line has an id, only display the description otherwise. -->
+        <xpath expr="//span[@t-field='move_line.product_id']/.." position="attributes">
+            <attribute name="t-if">move_line.id</attribute>
+        </xpath>
+        <xpath expr="//span[@t-field='move_line.product_id']/.." position="after">
+            <td t-else="">
+                <span t-field="move_line.description_picking" />
+            </td>
+        </xpath>
+        <!-- Disable the rest, when line doesn't have an id -->
+        <xpath expr="//t[@name='move_line_lot']/td" position="attributes">
+            <attribute name="t-if">move_line.id</attribute>
+        </xpath>
+        <xpath expr="//td[@name='move_line_lot_quantity']" position="attributes">
+            <attribute name="t-if">move_line.id</attribute>
+        </xpath>
+    </template>
+
+    <template
+        id="report_delivery_document_inherit_sale_stock"
+        inherit_id="sale_stock.report_delivery_document_inherit_sale_stock"
+        priority="120"
+    >
+        <!-- Remove the customer reference in the header if there is more than one -->
+        <xpath
+            expr='//div[@t-if="o.sudo().sale_id.client_order_ref"]'
+            position="attributes"
+        >
+            <attribute name="t-if">len(o.get_customer_refs())==1</attribute>
+        </xpath>
+
+        <!-- Replace the customer refs with the one based on the move line displayed -->
+        <xpath
+            expr='//div[@t-field="o.sudo().sale_id.client_order_ref"]'
+            position="attributes"
+        >
+            <attribute name="t-if">False</attribute>
+        </xpath>
+        <xpath
+            expr='//div[@t-field="o.sudo().sale_id.client_order_ref"]'
+            position="after"
+        >
+            <p class="m-0">
+                <t t-esc="o.get_customer_refs().pop()" />
+            </p>
+        </xpath>
+    </template>
+</odoo>
