@@ -569,6 +569,33 @@ class TestGroupByPullRules(TestGroupByBase, TransactionCase):
         self.assertTrue(picking.backorder_ids)
         self.assertNotEqual(picking, picking.backorder_ids)
 
+    def test_create_backorder_partial_qty_keeps_move_lines(self):
+        """A partially delivered move, with reserved lines, is backordered.
+
+        The reserved move lines of the remaining quantity follow the move to
+        the backorder.
+        """
+        so = self._get_new_sale_order(amount=10, carrier=self.carrier1)
+        so.action_confirm()
+        picking = so.picking_ids
+        self.assertTrue(picking.picking_type_id.group_pickings)
+        line = so.order_line.filtered(lambda line: not line.is_delivery)
+        self._update_qty_in_location(
+            picking.location_id, line.product_id, line.product_uom_qty
+        )
+        picking.action_assign()
+        move = picking.move_ids.filtered(lambda m: m.sale_line_id == line)
+        half = move.product_uom_qty / 2
+        move.quantity = half
+        move.picked = True
+        picking._action_done()
+        self.assertEqual(picking.state, "done")
+        backorder = picking.backorder_ids
+        self.assertEqual(len(backorder), 1)
+        self.assertEqual(backorder.sale_ids, so)
+        self.assertEqual(backorder.move_ids.product_uom_qty, half)
+        self.assertEqual(backorder.move_line_ids.picking_id, backorder)
+
     def test_create_backorder_references(self):
         """Ensure the backorder references only the remaining moves.
 

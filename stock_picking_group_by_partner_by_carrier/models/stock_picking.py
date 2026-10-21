@@ -127,8 +127,8 @@ class StockPicking(models.Model):
                         lambda ml, new_picking=new_picking: ml.picking_id != new_picking
                     )
                     if move_lines:
-                        moves.move_line_ids.package_level_id.picking_id = new_picking
-                        moves.move_line_ids.picking_id = new_picking
+                        # The package levels of Odoo 18 do not exist anymore
+                        move_lines.picking_id = new_picking
 
                     if not new_picking.backorder_id:
                         new_picking.backorder_id = old_picking
